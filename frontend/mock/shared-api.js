@@ -15,6 +15,7 @@ const errorResponse = (message, status = 500) => jsonResponse({ error: message }
 
 const byteLength = (value) => textEncoder.encode(value).length;
 const vBattFromFuel = (fuel) => Number((12.0 + (fuel / 100) * 4.6).toFixed(2));
+const isSafeFilename = (name) => /^[A-Za-z0-9._-]+$/.test(name) && !name.includes("..");
 
 const mockLogs = [
     { name: "current.jsonl", size: 8192, compressed: false },
@@ -186,7 +187,7 @@ const listHistory = (historySessions, faults) => {
 const parseMultipartJsonlUpload = (bodyBytes) => {
     const bodyStr = new TextDecoder("latin1").decode(bodyBytes);
     const nameMatch = bodyStr.match(/filename="([^"]+)"/);
-    if (!nameMatch?.[1].endsWith(".jsonl")) {
+    if (!nameMatch?.[1].endsWith(".jsonl") || !isSafeFilename(nameMatch[1])) {
         return { error: "Invalid file: expected a .jsonl session file", status: 400 };
     }
     const headerEnd = bodyStr.indexOf("\r\n\r\n");
@@ -484,6 +485,7 @@ function createMockApi(context) {
         const logFileMatch = path.match(/^\/api\/logs\/(.+)$/);
         if (logFileMatch) {
             const filename = decodeURIComponent(logFileMatch[1]);
+            if (!isSafeFilename(filename)) return errorResponse("invalid filename", 400);
             if (method === "GET") {
                 if (faults.logsRead) return errorResponse("SPIFFS read failed", 500);
                 return textResponse(mockLogContent, 200, {
