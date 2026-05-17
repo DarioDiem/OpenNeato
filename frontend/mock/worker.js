@@ -71,38 +71,56 @@ const createDefaultHistory = () => {
     );
 };
 
-function startRecordingTimer() {
+function resetRecordingSimulation() {
     const recordingFile = [...context.historySessions.entries()].find(
         ([, lines]) => !lines.some((line) => line.includes('"type":"summary"')),
     );
-    if (!recordingFile) return;
+    if (!recordingFile) {
+        recordingSimulation = null;
+        return;
+    }
 
     const [recordingName, recordingLines] = recordingFile;
     const lastPose = [...recordingLines].reverse().find((line) => line.includes('"x":'));
     const pos = lastPose ? JSON.parse(lastPose) : { x: 0, y: 0, t: 0, ts: 7244 };
-    let simX = pos.x;
-    let simY = pos.y;
-    let simT = pos.t;
-    let simTs = pos.ts;
+    recordingSimulation = {
+        name: recordingName,
+        x: pos.x,
+        y: pos.y,
+        t: pos.t,
+        ts: pos.ts,
+        lastUpdate: Date.now(),
+    };
+}
 
-    setInterval(() => {
-        simT += (Math.random() - 0.5) * 30;
-        if (simT < 0) simT += 360;
-        if (simT >= 360) simT -= 360;
-        const rad = (simT * Math.PI) / 180;
+function updateRecordingSession() {
+    if (!recordingSimulation) return;
+    const elapsed = Math.floor((Date.now() - recordingSimulation.lastUpdate) / 2000);
+    if (elapsed <= 0) return;
+    recordingSimulation.lastUpdate += elapsed * 2000;
+
+    const lines = context.historySessions.get(recordingSimulation.name);
+    if (!lines) return;
+
+    for (let i = 0; i < elapsed; i++) {
+        recordingSimulation.t += (Math.random() - 0.5) * 30;
+        if (recordingSimulation.t < 0) recordingSimulation.t += 360;
+        if (recordingSimulation.t >= 360) recordingSimulation.t -= 360;
+        const rad = (recordingSimulation.t * Math.PI) / 180;
         const step = 0.08 + Math.random() * 0.12;
-        simX += Math.cos(rad) * step;
-        simY -= Math.sin(rad) * step;
-        simTs += 2.0 + Math.random() * 0.3;
-        const lines = context.historySessions.get(recordingName);
-        if (!lines) return;
+        recordingSimulation.x += Math.cos(rad) * step;
+        recordingSimulation.y -= Math.sin(rad) * step;
+        recordingSimulation.ts += 2.0 + Math.random() * 0.3;
         if (lines.length > 1) lines.splice(1, 1);
-        lines.push(`{"x":${simX.toFixed(3)},"y":${simY.toFixed(3)},"t":${simT.toFixed(1)},"ts":${simTs.toFixed(1)}}`);
-    }, 2000);
+        lines.push(
+            `{"x":${recordingSimulation.x.toFixed(3)},"y":${recordingSimulation.y.toFixed(3)},"t":${recordingSimulation.t.toFixed(1)},"ts":${recordingSimulation.ts.toFixed(1)}}`,
+        );
+    }
 }
 
 let initializedScenario = null;
 let bootTime = Date.now();
+let recordingSimulation = null;
 
 const context = {
     state: {},
@@ -127,10 +145,10 @@ function initScenario(rawScenario) {
     context.historySessions = createDefaultHistory();
     bootTime = Date.now();
     initializedScenario = scenario;
+    resetRecordingSimulation();
 }
 
 initScenario("ok");
-startRecordingTimer();
 
 const toWorkerResponse = (response) => {
     if (response === false) return err("not found", 404);
@@ -145,6 +163,7 @@ async function handleApi(request, env) {
     const url = new URL(request.url);
     const scenario = scenarioFromRequest(url.searchParams, request.headers.get("Cookie") ?? "");
     if (scenario !== initializedScenario) initScenario(scenario);
+    updateRecordingSession();
 
     await sleep(randomInt(50, 200));
 
