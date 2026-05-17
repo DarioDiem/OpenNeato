@@ -1,6 +1,6 @@
-name = "openneato-demo"
+name = "openneato"
 main = "mock/worker.js"
-compatibility_date = "2026-05-18"
+compatibility_date = "2026-05-17"
 compatibility_flags = ["nodejs_compat"]
 
 workers_dev = false
